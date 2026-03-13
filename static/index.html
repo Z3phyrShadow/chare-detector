@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream AFK Monitor</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="status-indicator">
+                <span id="online-dot" class="dot offline"></span>
+                <span id="online-text">Loading...</span>
+            </div>
+            <h1 id="channel-name">Stream Monitor</h1>
+        </header>
+
+        <main>
+            <div class="card main-status" id="afk-card">
+                <h2>Current Status</h2>
+                <div class="status-display" id="afk-status-display">PRESENT</div>
+                <div class="timer" id="afk-timer">00:00:00</div>
+                <p class="subtitle">Current AFK Duration</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="card stat-card">
+                    <h3>AFK This Stream</h3>
+                    <div class="stat-value" id="afk-this-stream">0s</div>
+                </div>
+                <div class="card stat-card">
+                    <h3>AFK This Month</h3>
+                    <div class="stat-value" id="afk-this-month">0s</div>
+                </div>
+                <div class="card stat-card full-width">
+                    <h3>Last Stream</h3>
+                    <div class="stat-value small-text" id="last-stream">Never</div>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>Monitored via ML Vision</p>
+        </footer>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

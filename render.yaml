@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: twitch-afk-detector
+    env: docker
+    plan: free
+    healthCheckPath: /api/status
+    envVars:
+      - key: TWITCH_CLIENT_ID
+        sync: false
+      - key: TWITCH_CLIENT_SECRET
+        sync: false
+      - key: TWITCH_CHANNEL
+        sync: false
+      - key: POLL_INTERVAL_SECONDS
+        value: 30
