@@ -9,6 +9,7 @@ dependencies = [
     "mediapipe>=0.10.32",
     "opencv-python>=4.13.0.92",
     "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
     "python-dotenv>=1.2.2",
     "requests>=2.32.5",
     "sqlalchemy>=2.0.48",

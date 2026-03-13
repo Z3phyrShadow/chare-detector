@@ -1,5 +1,4 @@
 import cv2
-import mediapipe as mp
 import streamlink
 import numpy as np
 import logging
@@ -7,10 +6,8 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Initialize MediaPipe Face Detection
-mp_face_detection = mp.solutions.face_detection
-# Model selection 0 is for faces within 2 meters. 1 is for full range (up to 5m)
-face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
+# Initialize OpenCV Face Detector (Haar Cascade)
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 def grab_stream_frame(channel_name: str) -> Optional[np.ndarray]:
     """
@@ -54,23 +51,26 @@ def grab_stream_frame(channel_name: str) -> Optional[np.ndarray]:
 
 def detect_person(frame: np.ndarray) -> bool:
     """
-    Processes a BGR image frame with MediaPipe Face Detection.
+    Processes a BGR image frame with OpenCV Haar Cascades for face detection.
     Returns True if at least one face is detected, False otherwise.
     """
     if frame is None:
         return False
         
     try:
-        # Convert the BGR image to RGB
-        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # Convert to grayscale for Haar Cascade
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
-        # To improve performance, optionally mark the image as not writeable to
-        # pass by reference.
-        image_rgb.flags.writeable = False
-        results = face_detection.process(image_rgb)
+        # Detect faces
+        faces = face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=4,
+            minSize=(30, 30)
+        )
         
         # If detections exist, a person is present
-        return results.detections is not None and len(results.detections) > 0
+        return len(faces) > 0
     except Exception as e:
         logger.error(f"Error during face detection: {e}")
         return False
