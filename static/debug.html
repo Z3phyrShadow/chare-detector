@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Debug View</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        .debug-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+        .back-link {
+            color: rgba(255,255,255,0.5);
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: white; }
+        .debug-meta {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.4);
+            margin-bottom: 0.75rem;
+        }
+        .debug-legend {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.6);
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        #debug-img {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.08);
+            display: block;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .badge-present { background: rgba(0,200,100,0.2); color: #00c864; }
+        .badge-afk     { background: rgba(255,60,60,0.2);  color: #ff3c3c; }
+        .badge-nocam   { background: rgba(180,180,180,0.2); color: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="debug-header">
+            <h1 style="font-size:1.5rem;">Camera Debug View</h1>
+            <a href="/" class="back-link">← Back to Dashboard</a>
+        </div>
+
+        <div class="card" style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+            <span>Current State:</span>
+            <span class="status-badge" id="state-badge">Loading...</span>
+            <span class="debug-meta" id="last-updated" style="margin: 0; margin-left: auto;">Updating...</span>
+        </div>
+
+        <div class="card">
+            <div class="debug-legend">
+                <div class="legend-item"><div class="legend-dot" style="background:#00b450;"></div> Corner search zone</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#00ff50;"></div> Face detected (≥0.5)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#00b4ff;"></div> Face candidate (0.4–0.5)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#2200b4;"></div> NO_CAM (low complexity)</div>
+            </div>
+            <img id="debug-img" src="/debug.jpg" alt="Waiting for first frame...">
+            <p class="debug-meta" id="cam-std" style="margin-top: 0.75rem;"></p>
+        </div>
+    </div>
+
+    <script>
+        const img = document.getElementById('debug-img');
+        const badge = document.getElementById('state-badge');
+        const lastUpdated = document.getElementById('last-updated');
+
+        function refreshImage() {
+            img.src = '/debug.jpg?t=' + Date.now();
+        }
+
+        async function poll() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const state = data.state || 'UNKNOWN';
+                badge.textContent = state;
+                badge.className = 'status-badge ' + ({
+                    PRESENT: 'badge-present',
+                    AFK: 'badge-afk',
+                    NO_CAM: 'badge-nocam',
+                    OFFLINE: 'badge-nocam'
+                }[state] || '');
+                lastUpdated.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+            } catch(e) {}
+            refreshImage();
+        }
+
+        poll();
+        setInterval(poll, 5000);
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@ import datetime
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, BackgroundTasks
+from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -12,7 +12,7 @@ import models
 from database import engine, get_db, SessionLocal
 from config import settings
 from twitch_client import TwitchClient
-from vision import check_afk
+from vision import analyze_frame
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -26,11 +26,15 @@ twitch_client = TwitchClient(settings.TWITCH_CLIENT_ID, settings.TWITCH_CLIENT_S
 
 # Global state for background task
 is_running = True
+current_camera_state = "NO_CAM"
+afk_suspect_count = 0        # How many consecutive AFK signals we've seen
+AFK_CONFIRM_THRESHOLD = 3   # Need this many consecutive AFK signals to officially start AFK
 
 async def background_poller():
     """Background task to poll Twitch and Check AFK status."""
     logger.info("Starting background poller...")
     while is_running:
+        sleep_interval = settings.POLL_INTERVAL_SECONDS
         try:
             db = SessionLocal()
             channel = settings.TWITCH_CHANNEL
@@ -73,8 +77,10 @@ async def background_poller():
                     db.commit()
                     db.refresh(active_session)
                 
-                # 2. Check AFK Status using vision
-                is_afk = check_afk(channel)
+                # 2. Check Camera State using vision
+                camera_state = analyze_frame(channel)
+                global current_camera_state
+                current_camera_state = camera_state
                 
                 # Check for an ongoing AFK event
                 open_afk = db.query(models.AFKEvent).filter(
@@ -82,33 +88,48 @@ async def background_poller():
                     models.AFKEvent.ended_at == None
                 ).first()
                 
-                if is_afk:
-                    if not open_afk:
-                        logger.info(f"AFK started for {channel}!")
-                        # Create new AFK event
-                        new_afk = models.AFKEvent(session_id=active_session.id)
-                        db.add(new_afk)
-                        db.commit()
+                if camera_state == "AFK":
+                    global afk_suspect_count
+                    afk_suspect_count += 1
+                    sleep_interval = 1  # 1s rapid checks during confirmation and AFK
+                    
+                    if afk_suspect_count >= AFK_CONFIRM_THRESHOLD:
+                        # Confirmed AFK
+                        if not open_afk:
+                            logger.info(f"AFK confirmed for {channel} after {afk_suspect_count} checks!")
+                            new_afk = models.AFKEvent(session_id=active_session.id)
+                            db.add(new_afk)
+                            db.commit()
+                        else:
+                            logger.info(f"Still AFK for {channel} (check #{afk_suspect_count})...")
+                            open_afk.duration_seconds = (datetime.datetime.utcnow() - open_afk.started_at).total_seconds()
+                            db.commit()
                     else:
-                        logger.info(f"Still AFK for {channel}...")
-                        # Update duration incrementally (optional, or just calculate on read)
-                        open_afk.duration_seconds = (datetime.datetime.utcnow() - open_afk.started_at).total_seconds()
-                        db.commit()
-                else:
+                        logger.info(f"Possible AFK for {channel}: {afk_suspect_count}/{AFK_CONFIRM_THRESHOLD} checks...")
+                        
+                elif camera_state == "PRESENT":
+                    afk_suspect_count = 0  # Reset immediately on any presence
                     if open_afk:
-                        logger.info(f"AFK ended for {channel}!")
-                        # Close the AFK event
+                        logger.info(f"AFK ended for {channel} (Present)!")
                         open_afk.ended_at = datetime.datetime.utcnow()
                         open_afk.duration_seconds = (open_afk.ended_at - open_afk.started_at).total_seconds()
                         db.commit()
+                elif camera_state == "NO_CAM":
+                    afk_suspect_count = 0  # Reset on no-cam too
+                    if open_afk:
+                        logger.info(f"AFK ended for {channel} (No Cam)!")
+                        open_afk.ended_at = datetime.datetime.utcnow()
+                        open_afk.duration_seconds = (open_afk.ended_at - open_afk.started_at).total_seconds()
+                        db.commit()
+                    logger.info(f"No Camera found for {channel}.")
             
             db.close()
             
         except Exception as e:
             logger.error(f"Error in background poller: {e}")
             
-        # Sleep for the polling interval
-        await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
+        # Sleep for the dynamic polling interval
+        await asyncio.sleep(sleep_interval)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -133,7 +154,7 @@ def get_status(db: Session = Depends(get_db)):
                 ).first()
     
     if not active_session:
-        return {"online": False, "is_afk": False, "current_afk_duration": 0}
+        return {"online": False, "state": "OFFLINE", "is_afk": False, "current_afk_duration": 0}
         
     open_afk = db.query(models.AFKEvent).filter(
                     models.AFKEvent.session_id == active_session.id,
@@ -142,9 +163,9 @@ def get_status(db: Session = Depends(get_db)):
                 
     if open_afk:
         duration = int((datetime.datetime.utcnow() - open_afk.started_at).total_seconds())
-        return {"online": True, "is_afk": True, "current_afk_duration": duration}
+        return {"online": True, "state": "AFK", "is_afk": True, "current_afk_duration": duration}
     
-    return {"online": True, "is_afk": False, "current_afk_duration": 0}
+    return {"online": True, "state": current_camera_state, "is_afk": False, "current_afk_duration": 0}
 
 @app.get("/api/stats")
 def get_stats(db: Session = Depends(get_db)):

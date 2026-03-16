@@ -69,6 +69,7 @@ h1 {
     font-weight: 800;
     background: linear-gradient(to right, #60a5fa, #a78bfa);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -89,6 +90,7 @@ h1 {
 
 .main-status.present { border-top-color: var(--accent-present); }
 .main-status.afk { border-top-color: var(--accent-afk); }
+.main-status.no-cam { border-top-color: var(--accent-warning); }
 
 .status-display {
     font-size: 3rem;
@@ -99,6 +101,7 @@ h1 {
 
 .present .status-display { color: var(--accent-present); }
 .afk .status-display { color: var(--accent-afk); animation: pulse 2s infinite; }
+.no-cam .status-display { color: var(--accent-warning); }
 .offline-card .status-display { color: var(--accent-offline); }
 
 .timer {

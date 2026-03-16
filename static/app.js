@@ -40,9 +40,19 @@ const updateUI = async () => {
             onlineDot.className = 'dot online';
             onlineText.textContent = 'STREAM ONLINE';
             
-            afkCard.className = `card main-status ${statusData.is_afk ? 'afk' : 'present'}`;
-            afkStatusDisplay.textContent = statusData.is_afk ? 'AWAY FROM KEYBOARD' : 'PRESENT';
-            afkTimer.textContent = formatTimer(statusData.current_afk_duration);
+            if (statusData.state === 'AFK') {
+                afkCard.className = 'card main-status afk';
+                afkStatusDisplay.textContent = 'AWAY FROM KEYBOARD';
+                afkTimer.textContent = formatTimer(statusData.current_afk_duration);
+            } else if (statusData.state === 'NO_CAM') {
+                afkCard.className = 'card main-status no-cam';
+                afkStatusDisplay.textContent = 'NO CAMERA';
+                afkTimer.textContent = '00:00:00';
+            } else {
+                afkCard.className = 'card main-status present';
+                afkStatusDisplay.textContent = 'PRESENT';
+                afkTimer.textContent = '00:00:00';
+            }
             
         } else {
             onlineDot.className = 'dot offline';
@@ -61,6 +71,12 @@ const updateUI = async () => {
         document.getElementById('afk-this-stream').textContent = formatTime(statsData.afk_this_stream);
         document.getElementById('afk-this-month').textContent = formatTime(statsData.afk_this_month);
         document.getElementById('last-stream').textContent = formatDate(statsData.last_stream);
+
+        // Update debug image cache buster
+        const debugImg = document.getElementById('debug-image');
+        if (debugImg) {
+            debugImg.src = `/debug.jpg?t=${new Date().getTime()}`;
+        }
 
     } catch (error) {
         console.error("Error fetching data:", error);

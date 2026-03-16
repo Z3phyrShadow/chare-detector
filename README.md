@@ -1,33 +1,86 @@
-# Twitch AFK Detector
+# chare-detector
 
-A lightweight, server-side AFK detector for Twitch streams designed to run on free hosting tiers (Render, Railway, etc.). 
-It polls your stream every 30 seconds (only when online) and uses MediaPipe Face Detection to determine if you are present or AFK.
+Automatic AFK tracker for Twitch streams. Watches a stream in real-time, detects when the streamer leaves their webcam, and logs AFK sessions to a dashboard.
 
-## Features
-* **100% Free Hosting Friendly**: Only processes frames when the stream is online, checking every 30 seconds.
-* **MediaPipe Face Detection**: Lightweight ML model that handles small cams or fullscreen automatically.
-* **Public Dashboard**: A clean, dark-mode web dashboard showing real-time stream status, current AFK duration, and historical stats.
+## How It Works
 
-## Setup for Local Development
-1. Clone the repository.
-2. Ensure you have Python 3.10+ installed.
-3. Install dependencies: `uv pip install -r requirements.txt` (or standard pip)
-4. Rename `.env.example` to `.env` and fill in your details:
-   * Get your Twitch Client ID & Secret from the [Twitch Dev Console](https://dev.twitch.tv/console).
-5. Run the server: `uvicorn main:app --reload`
-6. Visit `http://localhost:8000` to see the dashboard.
+The server runs a background poller on a configurable interval. Each cycle:
 
-## Deployment to Render (Free Tier)
-This repo includes a `Dockerfile` and `render.yaml` for easy deployment.
-1. Push this code to a GitHub repository.
-2. Sign up for [Render](https://render.com) and link your GitHub.
-3. Create a new "Blueprint Instance" and point it to your repo.
-4. Render will automatically detect the `render.yaml`.
-5. Enter your Twitch API credentials (`TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_CHANNEL`) in the Environment Variables section in the Render dashboard.
+1. **Stream check** — Queries the Twitch API to confirm the stream is live. If offline, closes any open session.
+2. **Frame grab** — Uses `streamlink` to pull a single frame from the live stream.
+3. **Webcam detection** — Measures pixel complexity (std dev) of the top-left 30% of the frame. A real webcam feed is visually complex; a starting/ending screen is flat → `NO_CAM`.
+4. **Face detection** — If the webcam is visible, runs the OpenCV ResNet-SSD DNN face detector on the corner crop. Falls back to a full-frame scan for fullscreen cam layouts.
+5. **State decision:**
+   - `PRESENT` — face detected in webcam area
+   - `AFK` — webcam visible, no face found
+   - `NO_CAM` — starting/ending screen detected, or stream unavailable
+6. **Rolling AFK confirmation** — Requires 3 consecutive `AFK` signals (at 1s intervals) before opening an AFK event in the database. Resets immediately on any `PRESENT` signal.
 
-### Preventing Sleep
-Render's free tier sleeps after 15 minutes of inactivity. To ensure the detector runs during your stream, set up a free [UptimeRobot](https://uptimerobot.com/) HTTPS monitor pointing to your Render URL (e.g., `https://your-app.onrender.com/api/status`) polling every 10 minutes. 
+## States
 
-## Limitations & Best Practices
-* **Face Detection**: The detector relies on finding a face. If you wear a full mask or turn completely away for 30s, it may trigger AFK.
-* **False Positives**: To avoid brief false positive AFKs, the dashboard updates every 5 seconds, but the underlying check is every 30 seconds.
+| State | Meaning | AFK timer |
+|---|---|---|
+| `PRESENT` | Streamer at camera | Stops |
+| `AFK` | Camera on, streamer gone | Starts (after 3 confirmations) |
+| `NO_CAM` | Starting/ending screen | No effect |
+| `OFFLINE` | Stream is offline | — |
+
+## Setup
+
+### 1. Clone and install
+
+```bash
+git clone <repo-url>
+cd chare-detector
+uv sync
+```
+
+### 2. Configure
+
+Copy `.env.example` to `.env` and fill in your credentials:
+
+```env
+TWITCH_CLIENT_ID=your_client_id
+TWITCH_CLIENT_SECRET=your_client_secret
+TWITCH_CHANNEL=channel_name
+POLL_INTERVAL_SECONDS=30
+```
+
+**Get Twitch credentials:**
+- Go to [dev.twitch.tv/console](https://dev.twitch.tv/console)
+- Create a new application → copy Client ID and generate a Client Secret
+
+### 3. Run
+
+```bash
+uv run uvicorn main:app --reload
+```
+
+Open [http://localhost:8000](http://localhost:8000) for the dashboard.
+
+> **Note:** On first run, the DNN face detector model (~2MB) will be downloaded automatically to `models/`.
+
+## Tech Stack
+
+- **Backend:** FastAPI + SQLAlchemy (SQLite)
+- **Vision:** OpenCV DNN (ResNet-SSD face detector) + streamlink
+- **Frontend:** Vanilla HTML/CSS/JS
+- **Stream:** Twitch API + streamlink
+
+## Dashboard
+
+The dashboard shows:
+- Live streamer state (PRESENT / AFK / NO_CAM / OFFLINE)
+- AFK time this stream
+- AFK time this month
+- Debug camera view with detection overlay (face confidence scores + webcam zone)
+
+## Expose publicly (optional)
+
+To access the dashboard remotely while running locally:
+
+```bash
+ngrok http 8000
+```
+
+Install ngrok from [ngrok.com](https://ngrok.com), run `ngrok config add-authtoken <token>` once, then the above command gives you a public HTTPS URL.

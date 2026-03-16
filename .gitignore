@@ -14,3 +14,10 @@ wheels/
 
 # Database
 *.db
+
+# DNN model weights (auto-downloaded on first run)
+models/
+
+# Debug output
+debug_output/
+static/debug.jpg
